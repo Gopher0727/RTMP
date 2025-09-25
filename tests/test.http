@@ -1,0 +1,13 @@
+GET http://localhost:8080/services
+
+###
+# 长轮询：在一个请求中保持连接，等待消息
+GET http://localhost:8080/longpoll?id=client1
+Accept: application/octet-stream
+
+###
+# 发送消息到 client1
+POST http://localhost:8080/send?to=client1
+Content-Type: application/octet-stream
+
+Hello, client1
