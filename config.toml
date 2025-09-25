@@ -1,0 +1,24 @@
+app_name = "realtime-message-push-service"
+env = "development"                        # development | production
+
+[server]
+address = "0.0.0.0"
+port = 8080
+
+[mysql]
+user_name = "user"
+password = "1900271083"
+host = "localhost"
+port = 3306
+
+[redis]
+# Supports a single instance or cluster (list of addresses)
+address = ["127.0.0.1:6379"]
+password = ""
+
+[jwt]
+secret = "replace_with_secure_secret"
+issuer = "rtmp-push"
+token_prefix = "Bearer "
+access_exp_minutes = 60
+refresh_exp_hours = 24
