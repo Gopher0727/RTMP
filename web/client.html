@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>WS Demo</title>
+</head>
+
+<body>
+    <h3>WebSocket 客户端示例</h3>
+
+    <label>
+        URL:
+        <input id="url" value="ws://localhost:8080/ws?id=user1&room=room1" size="50">
+    </label>
+    <button id="connect">连接</button>
+    <button id="disconnect">断开</button>
+    <br><br>
+
+    <label>
+        消息类型:
+        <select id="type">
+            <option value="message">message</option>
+            <option value="join">join</option>
+        </select>
+    </label>
+
+    <label>
+        to:
+        <input id="to" placeholder="目标 client id">
+    </label>
+
+    <label>
+        room:
+        <input id="room" placeholder="room">
+    </label>
+
+    <br>
+    <textarea id="payload" rows="4" cols="60">{"text":"hello"}</textarea>
+    <br>
+    <button id="send">发送</button>
+    <hr>
+
+    <pre id="log" style="height:300px;overflow:auto;background:#f5f5f5;"></pre>
+
+    <script>
+        let ws = null;
+
+        const log = (t) => {
+            const p = document.getElementById('log');
+            p.textContent += t + "\n";
+            p.scrollTop = p.scrollHeight;
+        };
+
+        document.getElementById('connect').onclick = () => {
+            const url = document.getElementById('url').value;
+            if (ws) {
+                log('已连接');
+                return;
+            }
+            ws = new WebSocket(url);
+            ws.onopen = () => log('open ' + url);
+            ws.onmessage = (e) => {
+                try {
+                    log('recv: ' + e.data);
+                } catch (e) {
+                    log('recv-err');
+                }
+            };
+            ws.onclose = () => {
+                log('closed');
+                ws = null;
+            };
+            ws.onerror = (ev) => log('error ' + JSON.stringify(ev));
+        };
+
+        document.getElementById('disconnect').onclick = () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        };
+
+        document.getElementById('send').onclick = () => {
+            if (!ws || ws.readyState !== 1) {
+                log('未连接');
+                return;
+            }
+            const msg = {
+                type: document.getElementById('type').value,
+                from: new URL(document.getElementById('url').value).searchParams.get('id') || '',
+                to: document.getElementById('to').value || '',
+                room: document.getElementById('room').value || '',
+                payload: JSON.parse(document.getElementById('payload').value || '{}'),
+                ts: Math.floor(Date.now() / 1000)
+            };
+            const s = JSON.stringify(msg);
+            ws.send(s);
+            log('send: ' + s);
+        };
+    </script>
+</body>
+
+</html>
