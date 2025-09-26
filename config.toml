@@ -5,16 +5,15 @@ env = "development"                        # development | production
 address = "0.0.0.0"
 port = 8080
 
-[mysql]
-user_name = "user"
-password = "1900271083"
-host = "localhost"
-port = 3306
+[redis.session]
+addr = "127.0.0.1:6379"
+db = 0
+pool_size = 50
 
-[redis]
-# Supports a single instance or cluster (list of addresses)
-address = ["127.0.0.1:6379"]
-password = ""
+[redis.message]
+addr = "127.0.0.1:6380"
+db = 0
+pool_size = 100
 
 [jwt]
 secret = "replace_with_secure_secret"
