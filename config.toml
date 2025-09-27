@@ -5,8 +5,18 @@ env = "development"                        # development | production
 address = "0.0.0.0"
 port = 8080
 
+[mysql]
+host = "127.0.0.1"
+port = 3307
+user = "root"
+password = ""
+dbname = "rtmp_db"
+max_idle_conns = 10
+max_open_conns = 100
+max_lifetime = "1h"
+
 [redis.session]
-addr = "127.0.0.1:6379"
+addr = "127.0.0.1:63790"
 db = 0
 pool_size = 50
 
@@ -14,6 +24,10 @@ pool_size = 50
 addr = "127.0.0.1:6380"
 db = 0
 pool_size = 100
+
+[kafka]
+brokers = ["127.0.0.1:9092"]
+topic = "rtmp_messages"
 
 [jwt]
 secret = "replace_with_secure_secret"
