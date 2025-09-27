@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -24,10 +23,11 @@ type MySQLConfig struct {
 
 // InitMySQL 初始化MySQL连接
 func InitMySQL() (*gorm.DB, error) {
-	var mysqlConfig MySQLConfig
-	if err := viper.UnmarshalKey("mysql", &mysqlConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse mysql config: %w", err)
+	if globalConfig == nil {
+		return nil, fmt.Errorf("config not loaded")
 	}
+
+	mysqlConfig := globalConfig.MySQL
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		mysqlConfig.User,

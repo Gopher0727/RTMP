@@ -5,13 +5,12 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"github.com/Gopher0727/RTMP/config"
-	_ "github.com/Gopher0727/RTMP/docs" // 导入swagger文档
+	_ "github.com/Gopher0727/RTMP/docs"
+	"github.com/Gopher0727/RTMP/internal"
+	"github.com/Gopher0727/RTMP/internal/db"
 	"github.com/Gopher0727/RTMP/internal/kafka"
-	"github.com/Gopher0727/RTMP/internal/middleware"
 	"github.com/Gopher0727/RTMP/internal/router"
 )
 
@@ -37,8 +36,21 @@ import (
 // @description Type "Bearer" followed by a space and JWT token.
 
 func main() {
+	// 加载配置
 	cfg := config.LoadConfig("config.toml")
 	fmt.Printf("AppName: %s, Env: %s\n", cfg.AppName, cfg.Env)
+
+	// 初始化数据库连接
+	err := db.InitMySQL()
+	if err != nil {
+		log.Fatalf("Failed to initialize MySQL: %v", err)
+	}
+
+	// 初始化应用依赖
+	app, err := internal.InitApp(db.GetDB())
+	if err != nil {
+		log.Fatalf("Failed to initialize app: %v", err)
+	}
 
 	// 初始化Kafka
 	if err := kafka.InitKafka(cfg); err != nil {
@@ -46,17 +58,19 @@ func main() {
 	}
 
 	// 创建 Gin 引擎
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery(), middleware.RateLimit())
-
-	// 设置Swagger
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 设置路由
-	router.SetupRouter(r)
+	router.SetupRouter(r, app.AuthHandler, app.UserHandler, app.MessageHandler, app.RoomHandler, app.HubHandler)
 
 	// 启动 HTTP 服务，使用配置中的端口（若未设置则回退到 :8080）
-	addr := ":8080"
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	if addr == ":0" {
+		addr = ":8080"
+	}
 
 	log.Printf("Server starting on %s", addr)
 	if err := r.Run(addr); err != nil {
