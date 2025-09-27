@@ -1,11 +1,25 @@
 version: "3.9"
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ""
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: "rtmp_db"
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+
   redis-session:
     image: redis:7-alpine
     container_name: redis-session
     ports:
-      - "6379:6379"
+      - "63790:6379"
     command: [ "redis-server", "--appendonly", "yes" ]
 
   redis-message:
@@ -16,7 +30,7 @@ services:
     command: [ "redis-server", "--appendonly", "yes" ]
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:8.3.0
+    image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -25,7 +39,7 @@ services:
       - "2181:2181"
 
   kafka:
-    image: confluentinc/cp-kafka:8.3.0
+    image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
     depends_on:
       - zookeeper
@@ -36,3 +50,6 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     ports:
       - "9092:9092"
+
+volumes:
+  mysql-data:

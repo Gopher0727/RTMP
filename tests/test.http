@@ -1,13 +1,156 @@
-GET http://localhost:8080/services
+# RTMP Service HTTP 测试用例
+
+# 1. 健康检查
+GET http://localhost:8080/health
 
 ###
-# 长轮询：在一个请求中保持连接，等待消息
-GET http://localhost:8080/longpoll?id=client1
-Accept: application/octet-stream
+# 2. 用户认证相关
+
+# 2.1 用户注册
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123",
+  "email": "test@example.com",
+  "nickname": "测试用户"
+}
 
 ###
-# 发送消息到 client1
-POST http://localhost:8080/send?to=client1
-Content-Type: application/octet-stream
+# 2.2 用户登录
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
 
-Hello, client1
+{
+  "username": "testuser",
+  "password": "password123"
+}
+
+###
+# 3. 用户管理 (需要认证，将上一步的token替换到Authorization头)
+
+# 3.1 获取用户列表
+GET http://localhost:8080/api/v1/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 3.2 获取单个用户信息
+GET http://localhost:8080/api/v1/users/1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 3.3 更新用户状态
+PUT http://localhost:8080/api/v1/users/1/status
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "status": 1
+}
+
+###
+# 4. 房间管理
+
+# 4.1 创建房间
+POST http://localhost:8080/api/v1/rooms
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "name": "测试房间",
+  "description": "这是一个测试房间",
+  "is_private": false
+}
+
+###
+# 4.2 获取房间列表
+GET http://localhost:8080/api/v1/rooms
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 4.3 获取房间详情
+GET http://localhost:8080/api/v1/rooms/1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 4.4 添加成员到房间
+POST http://localhost:8080/api/v1/rooms/1/members
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "user_id": 2,
+  "role": 0
+}
+
+###
+# 4.5 获取房间成员列表
+GET http://localhost:8080/api/v1/rooms/1/members
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 5. 消息管理
+
+# 5.1 发送消息到用户
+POST http://localhost:8080/api/v1/messages
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "content": "你好，这是一条测试消息",
+  "type": 1,
+  "target_type": 1,
+  "target_id": 2
+}
+
+###
+# 5.2 发送消息到房间
+POST http://localhost:8080/api/v1/messages
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "content": "大家好，这是房间消息",
+  "type": 1,
+  "target_type": 2,
+  "target_id": 1
+}
+
+###
+# 5.3 获取用户消息
+GET http://localhost:8080/api/v1/messages/user/1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 5.4 获取房间消息
+GET http://localhost:8080/api/v1/messages/room/1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 5.5 标记消息已读
+PUT http://localhost:8080/api/v1/messages/read
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "message_id": 1
+}
+
+###
+# 6. 实时通信功能
+
+# 6.1 WebSocket连接测试
+# 注意：WebSocket请求在http文件中无法直接测试，需要使用WebSocket客户端
+# ws://localhost:8080/api/v1/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###
+# 6.2 HTTP长轮询测试
+GET http://localhost:8080/api/v1/poll
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Accept: application/json
+
+###
+# 6.3 获取在线用户列表
+GET http://localhost:8080/api/v1/online
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
