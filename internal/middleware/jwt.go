@@ -23,10 +23,17 @@ func GenerateToken(username string, cfg config.JWTConfig) (string, error) {
 	return token.SignedString([]byte(cfg.Secret))
 }
 
-// JWTMiddleware 返回一个 Gin 中间件：
-// - 验证 Authorization: Bearer <token>
-// - 将解析后的用户名放到上下文（c.Set("user" , username)）
-func JWTMiddleware(cfg config.JWTConfig) gin.HandlerFunc {
+// JWTAuth JWT认证中间件
+// @Summary JWT认证中间件
+// @Description 验证请求头中的JWT令牌
+// @Tags middleware
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Failure 401 {object} map[string]string
+// @Router /api/v1/* [get]
+func JWTAuth() gin.HandlerFunc {
+	cfg := config.GetJWTConfig()
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
 		if auth == "" {
@@ -40,7 +47,7 @@ func JWTMiddleware(cfg config.JWTConfig) gin.HandlerFunc {
 		}
 		tokStr := parts[1]
 		p := &jwt.Parser{}
-		tok, err := p.Parse(tokStr, func(t *jwt.Token) (interface{}, error) {
+		tok, err := p.Parse(tokStr, func(t *jwt.Token) (any, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrTokenSignatureInvalid
 			}
@@ -50,11 +57,17 @@ func JWTMiddleware(cfg config.JWTConfig) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
-		if claims, ok := tok.Claims.(jwt.MapClaims); ok {
-			if sub, ok := claims["sub"].(string); ok {
-				c.Set("user", sub)
-			}
+		claims, ok := tok.Claims.(jwt.MapClaims)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+			return
 		}
+		username, ok := claims["sub"].(string)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token subject"})
+			return
+		}
+		c.Set("username", username)
 		c.Next()
 	}
 }
