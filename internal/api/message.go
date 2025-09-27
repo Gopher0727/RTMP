@@ -14,11 +14,11 @@ import (
 
 // MessageHandler 消息处理器
 type MessageHandler struct {
-	messageService service.MessageService
+	messageService service.IMessageService
 }
 
 // NewMessageHandler 创建消息处理器
-func NewMessageHandler(messageService service.MessageService) *MessageHandler {
+func NewMessageHandler(messageService service.IMessageService) *MessageHandler {
 	return &MessageHandler{
 		messageService: messageService,
 	}
@@ -86,15 +86,18 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// 这里简化处理，实际应该从用户服务获取用户ID
-	userID := uint(1) // 临时处理
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ResponseUnauthorized(c, "未授权")
+		return
+	}
 
 	message := &model.Message{
 		Content:    req.Content,
 		Type:       req.Type,
 		TargetType: req.TargetType,
 		TargetID:   req.TargetID,
-		SenderID:   userID,
+		SenderID:   userID.(uint),
 		SenderName: username.(string),
 	}
 

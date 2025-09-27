@@ -14,11 +14,11 @@ import (
 
 // RoomHandler 房间处理器
 type RoomHandler struct {
-	roomService service.RoomService
+	roomService service.IRoomService
 }
 
 // NewRoomHandler 创建房间处理器
-func NewRoomHandler(roomService service.RoomService) *RoomHandler {
+func NewRoomHandler(roomService service.IRoomService) *RoomHandler {
 	return &RoomHandler{
 		roomService: roomService,
 	}
@@ -84,19 +84,16 @@ func (h *RoomHandler) CreateRoom(c *gin.Context) {
 	}
 
 	// 从JWT中获取用户信息
-	_, exists := c.Get("username")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		utils.ResponseUnauthorized(c, "未授权")
 		return
 	}
 
-	// 这里简化处理，实际应该从用户服务获取用户ID
-	creatorID := uint(1) // 临时处理
-
 	room := &model.Room{
 		Name:        req.Name,
 		Description: req.Description,
-		CreatorID:   creatorID,
+		CreatorID:   userID.(uint),
 		IsPrivate:   req.IsPrivate,
 	}
 

@@ -48,6 +48,12 @@ var limiter = NewIPRateLimiter(1, 5)
 // RateLimit 限流中间件
 func RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 对swagger路径添加例外规则，允许它们绕过rate_limit限制
+		if c.Request.URL.Path[:9] == "/swagger/" {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 		if !limiter.GetLimiter(ip).Allow() {
 			c.JSON(http.StatusTooManyRequests, gin.H{

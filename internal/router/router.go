@@ -11,7 +11,8 @@ import (
 )
 
 // SetupRouter 设置路由
-func SetupRouter(r *gin.Engine) {
+func SetupRouter(r *gin.Engine, authHandler *api.AuthHandler, userHandler *api.UserHandler,
+	messageHandler *api.MessageHandler, roomHandler *api.RoomHandler, hubHandler *api.HubHandler) {
 	// 全局中间件
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger())
@@ -28,40 +29,46 @@ func SetupRouter(r *gin.Engine) {
 	v1 := r.Group("/api/v1")
 	{
 		// 公开路由
-		v1.POST("/auth/register", api.Register)
-		v1.POST("/auth/login", api.Login)
+		authGroup := v1.Group("/auth")
+		{
+			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/logout", authHandler.Logout)
+			authGroup.POST("/refresh", middleware.JWTAuth(), authHandler.RefreshToken)
+		}
 
 		// 需要认证的路由
 		auth := v1.Group("/")
 		auth.Use(middleware.JWTAuth())
 		{
 			// 用户相关
-			auth.GET("/users", api.GetUsers)
-			auth.GET("/users/:id", api.GetUser)
-			auth.PUT("/users/:id", api.UpdateUser)
+			auth.GET("/users", userHandler.ListUsers)
+			auth.GET("/users/:id", userHandler.GetUser)
+			auth.GET("/users/me", userHandler.GetCurrentUser)
+			auth.PUT("/users/:id/status", userHandler.UpdateUserStatus)
 
 			// 消息相关
-			auth.POST("/messages", api.SendMessage)
-			auth.GET("/messages", api.GetMessages)
-			auth.GET("/messages/:id", api.GetMessage)
-			auth.PUT("/messages/:id/read", api.MarkMessageAsRead)
+			auth.POST("/messages", messageHandler.SendMessage)
+			auth.GET("/messages/user/:user_id", messageHandler.GetUserMessages)
+			auth.GET("/messages/room/:room_id", messageHandler.GetRoomMessages)
+			auth.PUT("/messages/read", messageHandler.MarkAsRead)
 
 			// 房间相关
-			auth.POST("/rooms", api.CreateRoom)
-			auth.GET("/rooms", api.GetRooms)
-			auth.GET("/rooms/:id", api.GetRoom)
-			auth.POST("/rooms/:id/members", api.AddRoomMember)
-			auth.DELETE("/rooms/:id/members/:userId", api.RemoveRoomMember)
-			auth.GET("/rooms/:id/members", api.GetRoomMembers)
+			auth.POST("/rooms", roomHandler.CreateRoom)
+			auth.GET("/rooms", roomHandler.ListRooms)
+			auth.GET("/rooms/:id", roomHandler.GetRoom)
+			auth.POST("/rooms/:id/members", roomHandler.AddMember)
+			auth.DELETE("/rooms/:id/members/:user_id", roomHandler.RemoveMember)
+			auth.GET("/rooms/:id/members", roomHandler.GetMembers)
 
 			// WebSocket连接
-			auth.GET("/ws", api.WebSocketHandler)
+			auth.GET("/ws", hubHandler.WebSocketHandler)
 
 			// HTTP长轮询
-			auth.GET("/poll", api.LongPollingHandler)
+			auth.GET("/poll", hubHandler.LongPollingHandler)
 
 			// 在线用户
-			auth.GET("/online", api.GetOnlineUsers)
+			auth.GET("/online", hubHandler.GetOnlineUsers)
 		}
 	}
 }

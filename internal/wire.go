@@ -32,6 +32,7 @@ func InitApp(db *gorm.DB) (*App, error) {
 		api.UserHandlerSet,
 		api.MessageHandlerSet,
 		api.RoomHandlerSet,
+		api.HubHandlerSet, // 添加HubHandler
 
 		// 配置
 		wire.Value(&config.Config{}),
@@ -45,16 +46,17 @@ func InitApp(db *gorm.DB) (*App, error) {
 // App 应用结构体
 type App struct {
 	// 服务层
-	UserService    service.UserService
-	MessageService service.MessageService
-	RoomService    service.RoomService
-	HubService     service.HubService
+	UserService    service.IUserService
+	MessageService service.IMessageService
+	RoomService    service.IRoomService
+	HubService     service.IHubService
 
 	// API处理器层
 	AuthHandler    *api.AuthHandler
 	UserHandler    *api.UserHandler
 	MessageHandler *api.MessageHandler
 	RoomHandler    *api.RoomHandler
+	HubHandler     *api.HubHandler // 添加HubHandler
 
 	// 配置
 	Config *config.Config
@@ -62,14 +64,15 @@ type App struct {
 
 // NewApp 创建应用
 func NewApp(
-	userService service.UserService,
-	messageService service.MessageService,
-	roomService service.RoomService,
-	hubService service.HubService,
+	userService service.IUserService,
+	messageService service.IMessageService,
+	roomService service.IRoomService,
+	hubService service.IHubService,
 	authHandler *api.AuthHandler,
 	userHandler *api.UserHandler,
 	messageHandler *api.MessageHandler,
 	roomHandler *api.RoomHandler,
+	hubHandler *api.HubHandler,
 	config *config.Config,
 ) *App {
 	return &App{
@@ -81,6 +84,7 @@ func NewApp(
 		UserHandler:    userHandler,
 		MessageHandler: messageHandler,
 		RoomHandler:    roomHandler,
+		HubHandler:     hubHandler,
 		Config:         config,
 	}
 }

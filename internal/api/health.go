@@ -1,9 +1,9 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+
+	"github.com/Gopher0727/RTMP/internal/utils"
 )
 
 // HealthHandler godoc
@@ -14,8 +14,10 @@ import (
 // @Produce json
 // @Success 200 {object} map[string]string
 // @Router /health [get]
+// HealthHandler 健康检查处理器
 func HealthHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ok",
+	utils.ResponseSuccess(c, gin.H{
+		"status":  "ok",
+		"service": "RTMP Service",
 	})
 }

@@ -77,11 +77,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	user, err := h.userService.Register(ctx, req.Username, req.Password)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
-			c.JSON(http.StatusConflict, utils.Response{
-				Code:    http.StatusConflict,
-				Message: "用户已存在",
-				Data:    nil,
-			})
+			utils.ResponseError(c, http.StatusConflict, 409, "用户已存在")
 			return
 		}
 		utils.ResponseInternalError(c, "注册失败")
@@ -89,7 +85,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// 生成JWT令牌
-	token, err := middleware.GenerateToken(user.Username, config.GetJWTConfig())
+	token, err := middleware.GenerateToken(user.Username, user.ID, config.GetJWTConfig())
 	if err != nil {
 		utils.ResponseInternalError(c, "生成令牌失败")
 		return
@@ -108,11 +104,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		User:  userInfo,
 	}
 
-	c.JSON(http.StatusCreated, utils.Response{
-		Code:    http.StatusCreated,
-		Message: "注册成功",
-		Data:    resp,
-	})
+	utils.ResponseSuccess(c, resp)
 }
 
 // Login godoc
@@ -151,7 +143,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// 生成JWT令牌
-	token, err := middleware.GenerateToken(user.Username, config.GetJWTConfig())
+	token, err := middleware.GenerateToken(user.Username, user.ID, config.GetJWTConfig())
 	if err != nil {
 		utils.ResponseInternalError(c, "生成令牌失败")
 		return
@@ -207,8 +199,15 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	// 获取用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ResponseUnauthorized(c, "未授权")
+		return
+	}
+
 	// 生成新的JWT令牌
-	token, err := middleware.GenerateToken(username.(string), config.GetJWTConfig())
+	token, err := middleware.GenerateToken(username.(string), userID.(uint), config.GetJWTConfig())
 	if err != nil {
 		utils.ResponseInternalError(c, "生成令牌失败")
 		return
@@ -216,7 +215,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	// 获取用户信息
 	ctx := context.Background()
-	user, err := h.userService.GetUserByID(ctx, 1) // 这里需要从JWT中获取用户ID
+	user, err := h.userService.GetUserByID(ctx, userID.(uint))
 	if err != nil {
 		utils.ResponseInternalError(c, "获取用户信息失败")
 		return

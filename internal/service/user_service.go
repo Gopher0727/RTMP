@@ -23,11 +23,11 @@ type IUserService interface {
 
 // UserServiceImp 用户服务实现
 type UserServiceImp struct {
-	userRepo repository.UserRepository
+	userRepo repository.IUserRepository
 }
 
 // NewUserService 创建用户服务
-func NewUserService(userRepo repository.UserRepository) IUserService {
+func NewUserService(userRepo repository.IUserRepository) IUserService {
 	return &UserServiceImp{
 		userRepo: userRepo,
 	}

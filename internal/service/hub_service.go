@@ -62,9 +62,9 @@ type IHubService interface {
 
 // HubService Hub服务实现
 type HubService struct {
-	userRepo    repository.UserRepository
-	messageRepo repository.MessageRepository
-	roomRepo    repository.RoomRepository
+	userRepo    repository.IUserRepository
+	messageRepo repository.IMessageRepository
+	roomRepo    repository.IRoomRepository
 	db          *gorm.DB
 
 	// 本地内存中的客户端连接
@@ -74,9 +74,9 @@ type HubService struct {
 
 // NewHubService 创建Hub服务
 func NewHubService(
-	userRepo repository.UserRepository,
-	messageRepo repository.MessageRepository,
-	roomRepo repository.RoomRepository,
+	userRepo repository.IUserRepository,
+	messageRepo repository.IMessageRepository,
+	roomRepo repository.IRoomRepository,
 	db *gorm.DB,
 ) IHubService {
 	return &HubService{

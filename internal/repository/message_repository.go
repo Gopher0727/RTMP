@@ -9,8 +9,8 @@ import (
 	"github.com/Gopher0727/RTMP/internal/model"
 )
 
-// MessageRepository 消息仓库接口
-type MessageRepository interface {
+// IMessageRepository 消息仓库接口
+type IMessageRepository interface {
 	Create(ctx context.Context, message *model.Message) error
 	GetByID(ctx context.Context, id uint) (*model.Message, error)
 	GetUserMessages(ctx context.Context, userID uint, page, size int) ([]*model.Message, int64, error)
@@ -18,23 +18,25 @@ type MessageRepository interface {
 	MarkAsRead(ctx context.Context, messageIDs []uint) error
 }
 
-// MessageRepositoryImpl 消息仓库实现
-type MessageRepositoryImpl struct {
+// MessageRepository 消息仓库实现
+type MessageRepository struct {
 	db *gorm.DB
 }
 
 // NewMessageRepository 创建消息仓库
-func NewMessageRepository(db *gorm.DB) MessageRepository {
-	return &MessageRepositoryImpl{db: db}
+func NewMessageRepository(db *gorm.DB) IMessageRepository {
+	return &MessageRepository{
+		db: db,
+	}
 }
 
 // Create 创建消息
-func (r *MessageRepositoryImpl) Create(ctx context.Context, message *model.Message) error {
+func (r *MessageRepository) Create(ctx context.Context, message *model.Message) error {
 	return r.db.WithContext(ctx).Create(message).Error
 }
 
 // GetByID 根据ID获取消息
-func (r *MessageRepositoryImpl) GetByID(ctx context.Context, id uint) (*model.Message, error) {
+func (r *MessageRepository) GetByID(ctx context.Context, id uint) (*model.Message, error) {
 	var message model.Message
 	if err := r.db.WithContext(ctx).First(&message, id).Error; err != nil {
 		return nil, err
@@ -43,7 +45,7 @@ func (r *MessageRepositoryImpl) GetByID(ctx context.Context, id uint) (*model.Me
 }
 
 // GetUserMessages 获取用户消息
-func (r *MessageRepositoryImpl) GetUserMessages(ctx context.Context, userID uint, page, size int) ([]*model.Message, int64, error) {
+func (r *MessageRepository) GetUserMessages(ctx context.Context, userID uint, page, size int) ([]*model.Message, int64, error) {
 	var messages []*model.Message
 	var total int64
 
@@ -63,7 +65,7 @@ func (r *MessageRepositoryImpl) GetUserMessages(ctx context.Context, userID uint
 }
 
 // GetRoomMessages 获取房间消息
-func (r *MessageRepositoryImpl) GetRoomMessages(ctx context.Context, roomID uint, page, size int) ([]*model.Message, int64, error) {
+func (r *MessageRepository) GetRoomMessages(ctx context.Context, roomID uint, page, size int) ([]*model.Message, int64, error) {
 	var messages []*model.Message
 	var total int64
 
@@ -83,7 +85,7 @@ func (r *MessageRepositoryImpl) GetRoomMessages(ctx context.Context, roomID uint
 }
 
 // MarkAsRead 标记消息为已读
-func (r *MessageRepositoryImpl) MarkAsRead(ctx context.Context, messageIDs []uint) error {
+func (r *MessageRepository) MarkAsRead(ctx context.Context, messageIDs []uint) error {
 	return r.db.WithContext(ctx).Model(&model.Message{}).
 		Where("id IN ?", messageIDs).
 		Update("is_read", true).Error

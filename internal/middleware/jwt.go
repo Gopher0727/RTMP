@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,13 +12,14 @@ import (
 	"github.com/Gopher0727/RTMP/config"
 )
 
-// GenerateToken 使用配置生成基于用户名的 JWT（HMAC SHA256）。
-func GenerateToken(username string, cfg config.JWTConfig) (string, error) {
+// GenerateToken 使用配置生成基于用户名和用户ID的 JWT（HMAC SHA256）。
+func GenerateToken(username string, userID uint, cfg config.JWTConfig) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": username,
-		"iss": cfg.Issuer,
-		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(time.Duration(cfg.AccessExpMinutes) * time.Minute).Unix(),
+		"sub":     username,
+		"user_id": userID,
+		"iss":     cfg.Issuer,
+		"iat":     time.Now().Unix(),
+		"exp":     time.Now().Add(time.Duration(cfg.AccessExpMinutes) * time.Minute).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(cfg.Secret))
@@ -31,7 +33,6 @@ func GenerateToken(username string, cfg config.JWTConfig) (string, error) {
 // @Produce json
 // @Security BearerAuth
 // @Failure 401 {object} map[string]string
-// @Router /api/v1/* [get]
 func JWTAuth() gin.HandlerFunc {
 	cfg := config.GetJWTConfig()
 	return func(c *gin.Context) {
@@ -68,6 +69,17 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 		c.Set("username", username)
+
+		// 设置用户ID
+		if userIDFloat, ok := claims["user_id"].(float64); ok {
+			userID := uint(userIDFloat)
+			c.Set("user_id", userID)
+		} else if userIDStr, ok := claims["user_id"].(string); ok {
+			if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
+				c.Set("user_id", uint(userID))
+			}
+		}
+
 		c.Next()
 	}
 }

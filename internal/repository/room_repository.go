@@ -9,12 +9,12 @@ import (
 	"github.com/Gopher0727/RTMP/internal/model"
 )
 
-// RoomRepositoryImpl 房间仓库接口
-type RoomRepositoryImpl interface {
+// IRoomRepository 房间仓库接口
+type IRoomRepository interface {
 	Create(ctx context.Context, room *model.Room) error
 	GetByID(ctx context.Context, id uint) (*model.Room, error)
 	List(ctx context.Context, page, size int) ([]*model.Room, int64, error)
-	AddMember(ctx context.Context, roomID, userID uint, role string) error
+	AddMember(ctx context.Context, roomID, userID uint, role int) error
 	RemoveMember(ctx context.Context, roomID, userID uint) error
 	GetMembers(ctx context.Context, roomID uint) ([]*model.RoomMember, error)
 	IsMember(ctx context.Context, roomID, userID uint) (bool, error)
@@ -26,8 +26,10 @@ type RoomRepository struct {
 }
 
 // NewRoomRepository 创建房间仓库
-func NewRoomRepository(db *gorm.DB) *RoomRepository {
-	return &RoomRepository{db: db}
+func NewRoomRepository(db *gorm.DB) IRoomRepository {
+	return &RoomRepository{
+		db: db,
+	}
 }
 
 // Create 创建房间

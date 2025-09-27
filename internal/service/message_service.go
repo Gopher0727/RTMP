@@ -19,12 +19,12 @@ type IMessageService interface {
 
 // MessageService 消息服务实现
 type MessageService struct {
-	messageRepo repository.MessageRepository
-	roomRepo    repository.RoomRepository
+	messageRepo repository.IMessageRepository
+	roomRepo    repository.IRoomRepository
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(messageRepo repository.MessageRepository, roomRepo repository.RoomRepository) *MessageService {
+func NewMessageService(messageRepo repository.IMessageRepository, roomRepo repository.IRoomRepository) IMessageService {
 	return &MessageService{
 		messageRepo: messageRepo,
 		roomRepo:    roomRepo,

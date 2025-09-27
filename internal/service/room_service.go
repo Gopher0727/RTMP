@@ -14,7 +14,7 @@ type IRoomService interface {
 	CreateRoom(ctx context.Context, room *model.Room) error
 	GetRoomByID(ctx context.Context, id uint) (*model.Room, error)
 	ListRooms(ctx context.Context, page, size int) ([]*model.Room, int64, error)
-	AddMember(ctx context.Context, roomID, userID uint, role string) error
+	AddMember(ctx context.Context, roomID, userID uint, role int) error
 	RemoveMember(ctx context.Context, roomID, userID uint) error
 	GetMembers(ctx context.Context, roomID uint) ([]*model.RoomMember, error)
 	IsMember(ctx context.Context, roomID, userID uint) (bool, error)
@@ -22,11 +22,11 @@ type IRoomService interface {
 
 // RoomService 房间服务实现
 type RoomService struct {
-	roomRepo repository.RoomRepository
+	roomRepo repository.IRoomRepository
 }
 
 // NewRoomService 创建房间服务
-func NewRoomService(roomRepo repository.RoomRepository) *RoomService {
+func NewRoomService(roomRepo repository.IRoomRepository) IRoomService {
 	return &RoomService{
 		roomRepo: roomRepo,
 	}

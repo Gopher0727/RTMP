@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/wire"
 	"github.com/gorilla/websocket"
 
 	"github.com/Gopher0727/RTMP/internal/model"
@@ -212,3 +213,6 @@ func (h *HubHandler) writePump(client *service.Client) {
 		}
 	}
 }
+
+// HubHandlerSet Hub处理器依赖注入
+var HubHandlerSet = wire.NewSet(NewHubHandler)

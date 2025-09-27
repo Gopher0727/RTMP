@@ -18,25 +18,28 @@ import (
 
 // InitApp 初始化应用依赖
 func InitApp(db *gorm.DB) (*App, error) {
-	userRepository := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepository)
-	messageRepository := repository.NewMessageRepository(db)
-	roomRepository := repository.NewRoomRepository(db)
+	iUserRepository := repository.NewUserRepository(db)
+	iMessageRepository := repository.NewMessageRepository(db)
+	iRoomRepository := repository.NewRoomRepository(db)
 
-	messageService := service.NewMessageService(messageRepository, roomRepository)
-	roomService := service.NewRoomService(roomRepository)
-	hubService := service.NewHubService(userRepository, messageRepository, roomRepository, db)
-	authHandler := api.NewAuthHandler(userService)
-	userHandler := api.NewUserHandler(userService)
-	messageHandler := api.NewMessageHandler(messageService)
-	roomHandler := api.NewRoomHandler(roomService)
-	config := _wireConfigValue
-	app := NewApp(userService, messageService, roomService, hubService, authHandler, userHandler, messageHandler, roomHandler, config)
+	iUserService := service.NewUserService(iUserRepository)
+	iMessageService := service.NewMessageService(iMessageRepository, iRoomRepository)
+	iRoomService := service.NewRoomService(iRoomRepository)
+	iHubService := service.NewHubService(iUserRepository, iMessageRepository, iRoomRepository, db)
+
+	authHandler := api.NewAuthHandler(iUserService)
+	userHandler := api.NewUserHandler(iUserService)
+	messageHandler := api.NewMessageHandler(iMessageService)
+	roomHandler := api.NewRoomHandler(iRoomService)
+	hubHandler := api.NewHubHandler(iHubService, iUserService, iMessageService, iRoomService)
+
+	config := wireConfigValue
+	app := NewApp(iUserService, iMessageService, iRoomService, iHubService, authHandler, userHandler, messageHandler, roomHandler, hubHandler, config)
 	return app, nil
 }
 
 var (
-	_wireConfigValue = &config.Config{}
+	wireConfigValue = &config.Config{}
 )
 
 // wire.go:
@@ -44,16 +47,17 @@ var (
 // App 应用结构体
 type App struct {
 	// 服务层
-	UserService    service.UserService
-	MessageService service.MessageService
-	RoomService    service.RoomService
-	HubService     service.HubService
+	UserService    service.IUserService
+	MessageService service.IMessageService
+	RoomService    service.IRoomService
+	HubService     service.IHubService
 
 	// API处理器层
 	AuthHandler    *api.AuthHandler
 	UserHandler    *api.UserHandler
 	MessageHandler *api.MessageHandler
 	RoomHandler    *api.RoomHandler
+	HubHandler     *api.HubHandler // 添加HubHandler
 
 	// 配置
 	Config *config.Config
@@ -61,14 +65,16 @@ type App struct {
 
 // NewApp 创建应用
 func NewApp(
-	userService service.UserService,
-	messageService service.MessageService,
-	roomService service.RoomService,
-	hubService service.HubService,
+	userService service.IUserService,
+	messageService service.IMessageService,
+	roomService service.IRoomService,
+	hubService service.IHubService,
 	authHandler *api.AuthHandler,
 	userHandler *api.UserHandler,
 	messageHandler *api.MessageHandler,
-	roomHandler *api.RoomHandler, config2 *config.Config,
+	roomHandler *api.RoomHandler,
+	hubHandler *api.HubHandler,
+	config *config.Config,
 ) *App {
 	return &App{
 		UserService:    userService,
@@ -79,6 +85,7 @@ func NewApp(
 		UserHandler:    userHandler,
 		MessageHandler: messageHandler,
 		RoomHandler:    roomHandler,
-		Config:         config2,
+		HubHandler:     hubHandler,
+		Config:         config,
 	}
 }

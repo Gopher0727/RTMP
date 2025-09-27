@@ -95,6 +95,49 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 	utils.ResponseSuccess(c, resp)
 }
 
+// GetCurrentUser godoc
+// @Summary 获取当前用户信息
+// @Description 获取当前登录用户的信息
+// @Tags users
+// @Accept json
+// @Produce json
+// @Success 200 {object} utils.Response{data=GetUserResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Security BearerAuth
+// @Router /api/v1/users/me [get]
+func (h *UserHandler) GetCurrentUser(c *gin.Context) {
+	// 从上下文中获取用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ResponseUnauthorized(c, "未授权")
+		return
+	}
+
+	ctx := context.Background()
+	user, err := h.userService.GetUserByID(ctx, userID.(uint))
+	if err != nil {
+		if err == service.ErrUserNotFound {
+			utils.ResponseNotFound(c, "用户不存在")
+			return
+		}
+		utils.ResponseInternalError(c, "获取用户信息失败")
+		return
+	}
+
+	resp := &GetUserResponse{
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Nickname: user.Nickname,
+		Avatar:   user.Avatar,
+		Status:   user.Status,
+	}
+
+	utils.ResponseSuccess(c, resp)
+}
+
 // ListUsers godoc
 // @Summary 获取用户列表
 // @Description 获取用户列表，支持分页
