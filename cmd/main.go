@@ -10,7 +10,6 @@ import (
 	_ "github.com/Gopher0727/RTMP/docs"
 	"github.com/Gopher0727/RTMP/internal"
 	"github.com/Gopher0727/RTMP/internal/db"
-	"github.com/Gopher0727/RTMP/internal/kafka"
 	"github.com/Gopher0727/RTMP/internal/router"
 )
 
@@ -50,11 +49,6 @@ func main() {
 	app, err := internal.InitApp(db.GetDB())
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
-	}
-
-	// 初始化Kafka
-	if err := kafka.InitKafka(cfg); err != nil {
-		log.Fatalf("Failed to initialize Kafka: %v", err)
 	}
 
 	// 创建 Gin 引擎

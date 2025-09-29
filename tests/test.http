@@ -11,38 +11,39 @@ POST http://localhost:8080/api/v1/auth/register
 Content-Type: application/json
 
 {
-  "username": "testuser",
+  "username": "testuser2",
   "password": "password123",
-  "email": "test@example.com",
-  "nickname": "测试用户"
+  "email": "test@example.com"
 }
 
 ###
 # 2.2 用户登录
+# @name login
 POST http://localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
-  "username": "testuser",
+  "username": "testuser2",
   "password": "password123"
 }
+
 
 ###
 # 3. 用户管理 (需要认证，将上一步的token替换到Authorization头)
 
 # 3.1 获取用户列表
 GET http://localhost:8080/api/v1/users
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 3.2 获取单个用户信息
 GET http://localhost:8080/api/v1/users/1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 3.3 更新用户状态
 PUT http://localhost:8080/api/v1/users/1/status
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -54,7 +55,7 @@ Content-Type: application/json
 
 # 4.1 创建房间
 POST http://localhost:8080/api/v1/rooms
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -66,17 +67,18 @@ Content-Type: application/json
 ###
 # 4.2 获取房间列表
 GET http://localhost:8080/api/v1/rooms
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 4.3 获取房间详情
 GET http://localhost:8080/api/v1/rooms/1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 4.4 添加成员到房间
+# todo
 POST http://localhost:8080/api/v1/rooms/1/members
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -87,14 +89,15 @@ Content-Type: application/json
 ###
 # 4.5 获取房间成员列表
 GET http://localhost:8080/api/v1/rooms/1/members
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 5. 消息管理
+# todo
 
 # 5.1 发送消息到用户
 POST http://localhost:8080/api/v1/messages
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -107,7 +110,7 @@ Content-Type: application/json
 ###
 # 5.2 发送消息到房间
 POST http://localhost:8080/api/v1/messages
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -120,17 +123,17 @@ Content-Type: application/json
 ###
 # 5.3 获取用户消息
 GET http://localhost:8080/api/v1/messages/user/1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 5.4 获取房间消息
 GET http://localhost:8080/api/v1/messages/room/1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 
 ###
 # 5.5 标记消息已读
 PUT http://localhost:8080/api/v1/messages/read
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Content-Type: application/json
 
 {
@@ -142,15 +145,15 @@ Content-Type: application/json
 
 # 6.1 WebSocket连接测试
 # 注意：WebSocket请求在http文件中无法直接测试，需要使用WebSocket客户端
-# ws://localhost:8080/api/v1/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# ws://localhost:8080/api/v1/ws?token={{login.response.body.data.token}}
 
 ###
 # 6.2 HTTP长轮询测试
 GET http://localhost:8080/api/v1/poll
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}
 Accept: application/json
 
 ###
 # 6.3 获取在线用户列表
 GET http://localhost:8080/api/v1/online
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer {{login.response.body.data.token}}

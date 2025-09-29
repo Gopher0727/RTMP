@@ -19,9 +19,10 @@ type Config struct {
 	} `mapstructure:"redis"`
 
 	Kafka struct {
-		Brokers       []string `mapstructure:"brokers" json:"brokers"`
-		Topics        []string `mapstructure:"topics" json:"topics"`
-		ConsumerGroup string   `mapstructure:"consumer_group" json:"consumer_group"`
+		Brokers        []string `mapstructure:"brokers" json:"brokers"`
+		Topics         []string `mapstructure:"topics" json:"topics"`
+		ConsumerGroup  string   `mapstructure:"consumer_group" json:"consumer_group"`
+		RetentionHours int      `mapstructure:"retention_hours" json:"retention_hours"`
 	} `mapstructure:"kafka"`
 
 	JWT JWTConfig `mapstructure:"jwt" json:"jwt"`
@@ -72,4 +73,25 @@ func GetServerConfig() ServerConfig {
 // GetJWTConfig 获取JWT配置
 func GetJWTConfig() JWTConfig {
 	return GetConfig().JWT
+}
+
+// GetRedisSessionConfig 获取Redis Session配置
+func GetRedisSessionConfig() RedisConfig {
+	return GetConfig().Redis.Session
+}
+
+// GetRedisMessageConfig 获取Redis Message配置
+func GetRedisMessageConfig() RedisConfig {
+	return GetConfig().Redis.Message
+}
+
+// GetKafkaConfig 获取Kafka配置
+func GetKafkaConfig() map[string]interface{} {
+	kafkaConfig := GetConfig().Kafka
+	return map[string]interface{}{
+		"Brokers":        kafkaConfig.Brokers,
+		"Topics":         kafkaConfig.Topics,
+		"ConsumerGroup":  kafkaConfig.ConsumerGroup,
+		"RetentionHours": kafkaConfig.RetentionHours,
+	}
 }

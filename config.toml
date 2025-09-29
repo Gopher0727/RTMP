@@ -27,7 +27,14 @@ pool_size = 100
 
 [kafka]
 brokers = ["127.0.0.1:9092"]
-topic = "rtmp_messages"
+consumer_group = "rtmp-service-group"
+topics = [
+    "user_messages",       # 用户消息主题
+    "room_messages",       # 房间消息主题
+    "instance_sync",       # 实例同步主题
+    "online_status"
+]
+retention_hours = 24
 
 [jwt]
 secret = "replace_with_secure_secret"
