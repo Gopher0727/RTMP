@@ -28,8 +28,9 @@ export const authApi = {
   // 用户登录
   login: async (credentials) => {
     const response = await api.post('/auth/login', credentials);
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
+    // 检查嵌套的data对象中的token
+    if (response.data && response.data.data && response.data.data.token) {
+      localStorage.setItem('token', response.data.data.token);
     }
     return response.data;
   },
@@ -37,6 +38,10 @@ export const authApi = {
   // 用户注册
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
+    // 检查嵌套的data对象中的token并保存
+    if (response.data && response.data.data && response.data.data.token) {
+      localStorage.setItem('token', response.data.data.token);
+    }
     return response.data;
   },
 

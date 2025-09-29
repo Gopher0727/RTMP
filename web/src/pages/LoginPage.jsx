@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const { login, register, isLoading } = useAuth();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -16,11 +17,18 @@ const LoginPage = () => {
       // 注册
       const result = await register({
         username,
-        password
+        password,
+        email
       });
 
       if (!result.success) {
         setError(result.error);
+      } else {
+        // 注册成功后，清空密码并切换回登录模式
+        setPassword('');
+        setEmail('');
+        setIsRegisterMode(false);
+        setError('注册成功，请登录');
       }
     } else {
       // 登录
@@ -33,6 +41,12 @@ const LoginPage = () => {
         setError(result.error);
       }
     }
+  };
+
+  const handleSwitchMode = () => {
+    // 切换模式时清除错误信息
+    setError('');
+    setIsRegisterMode(!isRegisterMode);
   };
 
   return (
@@ -53,6 +67,20 @@ const LoginPage = () => {
               placeholder="请输入用户名"
             />
           </div>
+
+          {isRegisterMode && (
+            <div className="form-group">
+              <label htmlFor="email">邮箱</label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="请输入邮箱"
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="password">密码</label>
@@ -82,7 +110,7 @@ const LoginPage = () => {
               <button
                 type="button"
                 className="switch-button"
-                onClick={() => setIsRegisterMode(false)}
+                onClick={handleSwitchMode}
               >
                 去登录
               </button>
@@ -93,7 +121,7 @@ const LoginPage = () => {
               <button
                 type="button"
                 className="switch-button"
-                onClick={() => setIsRegisterMode(true)}
+                onClick={handleSwitchMode}
               >
                 去注册
               </button>

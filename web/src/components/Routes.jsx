@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginPage from '../pages/LoginPage';
-import ChatPage from '../pages/ChatPage';
+import ChatRoom from '../pages/ChatRoom';
 
 // 受保护的路由组件
 const ProtectedRoute = ({ children }) => {
@@ -35,7 +35,7 @@ const AppRoutes = () => {
           path="/chat"
           element={
             <ProtectedRoute>
-              <ChatPage />
+              <ChatRoom />
             </ProtectedRoute>
           }
         />
@@ -43,13 +43,13 @@ const AppRoutes = () => {
         {/* 根路径重定向 */}
         <Route
           path="/"
-          element={<Navigate to="/login" replace />}
+          element={<Navigate to="/chat" replace />}
         />
 
         {/* 404页面 */}
         <Route
           path="*"
-          element={<Navigate to="/login" replace />}
+          element={<Navigate to="/chat" replace />}
         />
       </Routes>
     </Router>

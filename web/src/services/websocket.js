@@ -8,11 +8,22 @@ class WebSocketService {
     this.reconnectDelay = 1000;
     this.listeners = new Map();
     this.isConnecting = false;
+    this.heartbeatInterval = null;
+    this.heartbeatIntervalTime = 30000; // 30秒
+    this.autoReconnect = true;
+    this.manualDisconnect = false;
+  }
+
+  // 检查连接状态
+  isConnected() {
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
   // 连接WebSocket
   connect() {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    // 检查是否已连接
+    if (this.isConnected()) {
+      console.log('WebSocket already connected');
       return;
     }
 
@@ -21,17 +32,30 @@ class WebSocketService {
     }
 
     this.isConnecting = true;
+    this.manualDisconnect = false;
+
+    // 获取token
     const token = localStorage.getItem('token');
-    const url = `${this.url}?token=${token}`;
+    if (!token || token === 'null') {
+      console.error('Cannot connect to WebSocket: No authentication token');
+      this.emit('error', new Error('No authentication token'));
+      this.isConnecting = false;
+      return;
+    }
 
     try {
-      this.ws = new WebSocket(url);
+      // 使用配置的url或根据当前页面动态构建
+      const wsUrl = `${this.url}?token=${token}`;
 
+      this.ws = new WebSocket(wsUrl);
+
+      // 设置事件监听器
       this.ws.onopen = () => {
-        console.log('WebSocket连接已建立');
+        console.log('WebSocket connected');
         this.reconnectAttempts = 0;
         this.isConnecting = false;
         this.emit('open');
+        this.emit('connection_change', true);
       };
 
       this.ws.onmessage = (event) => {
@@ -44,23 +68,26 @@ class WebSocketService {
             this.emit(`message:${data.type}`, data);
           }
         } catch (error) {
-          console.error('解析WebSocket消息失败:', error);
+          console.error('Failed to parse WebSocket message:', error);
+          this.emit('error', error);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
+        console.error('WebSocket error:', error);
         this.isConnecting = false;
         this.emit('error', error);
       };
 
       this.ws.onclose = () => {
-        console.log('WebSocket连接已关闭');
+        console.log('WebSocket disconnected');
         this.isConnecting = false;
         this.emit('close');
+        this.emit('connection_change', false);
+        this.stopHeartbeat();
 
         // 尝试重连
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (this.autoReconnect && !this.manualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
           setTimeout(() => {
             this.reconnectAttempts++;
             console.log(`尝试第 ${this.reconnectAttempts} 次重连...`);
@@ -69,8 +96,9 @@ class WebSocketService {
         }
       };
     } catch (error) {
-      console.error('创建WebSocket连接失败:', error);
+      console.error('Failed to create WebSocket connection:', error);
       this.isConnecting = false;
+      this.emit('error', error);
     }
   }
 
@@ -86,11 +114,13 @@ class WebSocketService {
 
   // 关闭连接
   disconnect() {
+    this.manualDisconnect = true;
     if (this.ws) {
       this.ws.close();
       this.ws = null;
       this.reconnectAttempts = 0;
     }
+    this.stopHeartbeat();
   }
 
   // 添加事件监听器
@@ -103,45 +133,35 @@ class WebSocketService {
 
   // 移除事件监听器
   off(event, callback) {
-    if (this.listeners.has(event)) {
-      const callbacks = this.listeners.get(event);
-      const index = callbacks.indexOf(callback);
-      if (index !== -1) {
-        callbacks.splice(index, 1);
-      }
+    if (!this.listeners.has(event)) return;
+    const callbacks = this.listeners.get(event);
+    const index = callbacks.indexOf(callback);
+    if (index > -1) {
+      callbacks.splice(index, 1);
     }
   }
 
   // 触发事件
   emit(event, data) {
-    if (this.listeners.has(event)) {
-      this.listeners.get(event).forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error(`处理事件 ${event} 时出错:`, error);
-        }
-      });
-    }
-  }
-
-  // 获取连接状态
-  getReadyState() {
-    if (!this.ws) return 0;
-    return this.ws.readyState;
-  }
-
-  // 发送心跳保持连接
-  startHeartbeat(interval = 30000) {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
-
-    this.heartbeatInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.send({ type: 'ping' });
+    if (!this.listeners.has(event)) return;
+    this.listeners.get(event).forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`事件监听器错误 [${event}]:`, error);
       }
-    }, interval);
+    });
+  }
+
+  // 开始心跳
+  startHeartbeat() {
+    this.stopHeartbeat(); // 确保没有重复的心跳
+    this.heartbeatInterval = setInterval(() => {
+      this.send({
+        type: 'heartbeat',
+        timestamp: Date.now()
+      });
+    }, this.heartbeatIntervalTime);
   }
 
   // 停止心跳
@@ -153,6 +173,5 @@ class WebSocketService {
   }
 }
 
-// 导出单例实例
-const wsService = new WebSocketService();
-export default wsService;
+// 导出单例
+export default new WebSocketService();

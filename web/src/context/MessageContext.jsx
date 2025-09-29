@@ -1,181 +1,248 @@
-import { createContext, useState, useEffect, useContext } from 'react';
-import { messageApi, roomApi } from '../services/api';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import axios from 'axios';
 import wsService from '../services/websocket';
 import { useAuth } from './AuthContext';
 
 // 创建消息上下文
-const MessageContext = createContext(null);
+const MessageContext = createContext();
 
-// 消息上下文提供器组件
+// 消息提供者组件
 export const MessageProvider = ({ children }) => {
-  const { currentUser, isAuthenticated } = useAuth();
-  const [messages, setMessages] = useState([]);
+  // 使用认证上下文获取用户信息
+  const { user } = useAuth();
+  
+  // 状态管理
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState({});
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [unreadCount, setUnreadCount] = useState({});
+  const [wsConnected, setWsConnected] = useState(false);
 
   // 加载房间列表
-  const loadRooms = async () => {
-    if (!isAuthenticated) return;
-
+  const loadRooms = useCallback(async () => {
+    if (!user) return;
+    
     try {
-      setIsLoading(true);
-      const data = await roomApi.getRooms();
-      setRooms(data);
-
-      // 自动选择第一个房间
-      if (data.length > 0 && !selectedRoom) {
-        setSelectedRoom(data[0]);
-        loadRoomMessages(data[0].id);
+      setLoading(true);
+      setError(null);
+      
+      const response = await axios.get('/api/v1/rooms', {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      setRooms(response.data);
+      
+      // 如果有房间但未选择，选择第一个
+      if (response.data.length > 0 && !selectedRoom) {
+        handleSelectRoom(response.data[0].id);
       }
-    } catch (error) {
-      console.error('加载房间列表失败:', error);
+    } catch (err) {
+      console.error('加载房间失败:', err);
+      setError('加载房间失败，请重试');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [user, selectedRoom]);
 
-  // 加载房间消息
-  const loadRoomMessages = async (roomId) => {
-    if (!isAuthenticated) return;
-
+  // 选择房间
+  const handleSelectRoom = useCallback(async (roomId) => {
     try {
-      setIsLoading(true);
-      const data = await messageApi.getRoomMessages(roomId);
-      setMessages(data);
-
-      // 清除未读计数
-      setUnreadCounts(prev => ({
+      setLoading(true);
+      setError(null);
+      
+      // 获取房间信息
+      const roomResponse = await axios.get(`/api/v1/rooms/${roomId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // 获取房间消息
+      const messagesResponse = await axios.get(`/api/v1/rooms/${roomId}/messages`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      setSelectedRoom(roomResponse.data);
+      setMessages(messagesResponse.data);
+      
+      // 重置该房间的未读消息数
+      setUnreadCount(prev => ({
         ...prev,
         [roomId]: 0
       }));
-    } catch (error) {
-      console.error('加载房间消息失败:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 发送消息到房间
-  const sendMessageToRoom = async (roomId, content) => {
-    if (!isAuthenticated) return;
-
-    try {
-      const messageData = {
-        type: 'room',
-        target_id: roomId,
-        content: content,
-        sender_id: currentUser.id
-      };
-
-      // 发送到服务器
-      await messageApi.sendMessage(messageData);
-
-      // 也可以通过WebSocket发送
-      wsService.send({
-        type: 'message',
-        ...messageData
-      });
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      throw error;
-    }
-  };
-
-  // 发送私聊消息
-  const sendPrivateMessage = async (userId, content) => {
-    if (!isAuthenticated) return;
-
-    try {
-      const messageData = {
-        type: 'user',
-        target_id: userId,
-        content: content,
-        sender_id: currentUser.id
-      };
-
-      // 发送到服务器
-      await messageApi.sendMessage(messageData);
-
-      // 通过WebSocket发送
-      wsService.send({
-        type: 'message',
-        ...messageData
-      });
-    } catch (error) {
-      console.error('发送私聊消息失败:', error);
-      throw error;
-    }
-  };
-
-  // 选择房间
-  const selectRoom = (room) => {
-    setSelectedRoom(room);
-    loadRoomMessages(room.id);
-  };
-
-  // WebSocket消息处理
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    // 监听新消息
-    const handleNewMessage = (message) => {
-      if (message.type === 'message') {
-        setMessages(prev => [...prev, message]);
-
-        // 如果消息不是来自当前选中的房间，增加未读计数
-        if (message.target_id !== selectedRoom?.id) {
-          setUnreadCounts(prev => ({
-            ...prev,
-            [message.target_id]: (prev[message.target_id] || 0) + 1
-          }));
-        }
+      
+      // 连接WebSocket（如果尚未连接）
+      if (!wsService.isConnected()) {
+        wsService.connect();
+        wsService.startHeartbeat();
       }
-    };
+      
+      // 加入房间
+      wsService.send({
+        type: 'join_room',
+        room_id: roomId
+      });
+    } catch (err) {
+      console.error('选择房间失败:', err);
+      setError('选择房间失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    // 监听用户状态变化
-    const handleUserStatus = (data) => {
-      // 处理用户上线/下线状态更新
-      console.log('用户状态更新:', data);
-    };
+  // 创建房间
+  const createRoom = useCallback(async (roomData) => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await axios.post('/api/v1/rooms', roomData, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // 更新房间列表
+      setRooms(prev => [...prev, response.data]);
+      
+      return response.data;
+    } catch (err) {
+      console.error('创建房间失败:', err);
+      setError('创建房间失败，请重试');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-    // 注册监听器
-    wsService.on('message', handleNewMessage);
-    wsService.on('message:user_status', handleUserStatus);
+  // 发送消息到房间（带HTTP备选）
+  const sendMessageToRoom = useCallback(async (roomId, messageText) => {
+    if (!user || !messageText.trim()) return;
+    
+    const messageData = {
+      room_id: roomId,
+      content: messageText.trim(),
+      sender_id: user.id,
+      sender_name: user.username,
+      created_at: new Date().toISOString()
+    };
+    
+    try {
+      // 1. 尝试通过WebSocket发送
+      const wsSent = wsService.send({
+        type: 'send_message',
+        ...messageData
+      });
+      
+      // 如果WebSocket发送成功，直接更新本地消息列表
+      if (wsSent) {
+        setMessages(prev => [...prev, messageData]);
+        return;
+      }
+      
+      // 2. 如果WebSocket发送失败，使用HTTP作为备选
+      console.log('WebSocket发送失败，使用HTTP作为备选');
+      const response = await axios.post(`/api/v1/rooms/${roomId}/messages`, 
+        { content: messageText.trim() },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+      
+      // 更新本地消息列表
+      setMessages(prev => [...prev, response.data]);
+    } catch (err) {
+      console.error('发送消息失败:', err);
+      setError('发送消息失败，请重试');
+      throw err;
+    }
+  }, [user]);
+
+  // 处理WebSocket消息
+  const handleWebSocketMessage = useCallback((data) => {
+    if (data.type === 'new_message') {
+      // 如果消息来自当前选中的房间，添加到消息列表
+      if (selectedRoom && data.room_id === selectedRoom.id) {
+        setMessages(prev => [...prev, data]);
+      } else {
+        // 否则增加未读消息计数
+        setUnreadCount(prev => ({
+          ...prev,
+          [data.room_id]: (prev[data.room_id] || 0) + 1
+        }));
+      }
+    } else if (data.type === 'room_update') {
+      // 更新房间信息
+      setRooms(prev => prev.map(room => 
+        room.id === data.room_id ? { ...room, ...data } : room
+      ));
+    }
+  }, [selectedRoom]);
+
+  // 处理WebSocket错误
+  const handleWebSocketError = useCallback((error) => {
+    console.error('WebSocket错误:', error);
+  }, []);
+
+  // 处理连接状态变化
+  const handleConnectionChange = useCallback((connected) => {
+    setWsConnected(connected);
+  }, []);
+
+  // 初始化时加载房间列表
+  useEffect(() => {
+    if (user) {
+      loadRooms();
+    }
+  }, [user, loadRooms]);
+
+  // 初始化WebSocket连接事件监听
+  useEffect(() => {
+    // 监听WebSocket消息
+    wsService.on('message', handleWebSocketMessage);
+    wsService.on('error', handleWebSocketError);
+    wsService.on('connection_change', handleConnectionChange);
 
     // 清理函数
     return () => {
-      wsService.off('message', handleNewMessage);
-      wsService.off('message:user_status', handleUserStatus);
+      wsService.off('message', handleWebSocketMessage);
+      wsService.off('error', handleWebSocketError);
+      wsService.off('connection_change', handleConnectionChange);
     };
-  }, [isAuthenticated, selectedRoom]);
+  }, [handleWebSocketMessage, handleWebSocketError, handleConnectionChange]);
 
-  // 认证状态变化时加载房间
+  // 当组件卸载时，如果WebSocket已连接，断开连接
   useEffect(() => {
-    if (isAuthenticated) {
-      loadRooms();
-    } else {
-      // 清除数据
-      setMessages([]);
-      setRooms([]);
-      setSelectedRoom(null);
-      setUnreadCounts({});
-    }
-  }, [isAuthenticated]);
+    return () => {
+      if (wsService.isConnected()) {
+        wsService.disconnect();
+      }
+    };
+  }, []);
 
-  // 提供的上下文值
+  // 提供上下文值
   const contextValue = {
-    messages,
     rooms,
     selectedRoom,
-    isLoading,
-    unreadCounts,
+    messages,
+    loading,
+    error,
+    unreadCount,
+    wsConnected,
+    selectRoom: handleSelectRoom,
     sendMessageToRoom,
-    sendPrivateMessage,
-    selectRoom,
-    loadRooms,
-    loadRoomMessages
+    createRoom,
+    loadRooms
   };
 
   return (
@@ -185,7 +252,7 @@ export const MessageProvider = ({ children }) => {
   );
 };
 
-// 自定义Hook，方便使用消息上下文
+// 自定义Hook用于访问消息上下文
 export const useMessages = () => {
   const context = useContext(MessageContext);
   if (!context) {
