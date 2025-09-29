@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gopher0727/RTMP/config"
 	"github.com/Gopher0727/RTMP/internal/api"
+	"github.com/Gopher0727/RTMP/internal/kafka"
 	"github.com/Gopher0727/RTMP/internal/repository"
 	"github.com/Gopher0727/RTMP/internal/service"
 )
@@ -32,7 +33,7 @@ func InitApp(db *gorm.DB) (*App, error) {
 		api.UserHandlerSet,
 		api.MessageHandlerSet,
 		api.RoomHandlerSet,
-		api.HubHandlerSet, // 添加HubHandler
+		api.HubHandlerSet,
 
 		// 配置
 		wire.Value(&config.Config{}),
@@ -56,7 +57,7 @@ type App struct {
 	UserHandler    *api.UserHandler
 	MessageHandler *api.MessageHandler
 	RoomHandler    *api.RoomHandler
-	HubHandler     *api.HubHandler // 添加HubHandler
+	HubHandler     *api.HubHandler
 
 	// 配置
 	Config *config.Config
@@ -75,6 +76,18 @@ func NewApp(
 	hubHandler *api.HubHandler,
 	config *config.Config,
 ) *App {
+	// 初始化Kafka生产者
+	if err := kafka.InitKafka(config); err != nil {
+		// todo
+		panic("Failed to initialize Kafka producer: " + err.Error())
+	}
+
+	// 初始化Kafka消费者（在服务初始化后）
+	if err := kafka.InitConsumer(config, messageService, hubService); err != nil {
+		// todo
+		panic("Failed to initialize Kafka consumer: " + err.Error())
+	}
+
 	return &App{
 		UserService:    userService,
 		MessageService: messageService,

@@ -2,113 +2,143 @@ package kafka
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"sync"
 
 	"github.com/IBM/sarama"
 
 	"github.com/Gopher0727/RTMP/config"
-	"github.com/Gopher0727/RTMP/internal/service"
 )
 
 // MessageConsumer Kafka消息消费者
 type MessageConsumer struct {
-	consumer       sarama.ConsumerGroup
-	topics         []string
-	messageService service.MessageService
-	hubService     service.HubService
-	wg             sync.WaitGroup
-	ctx            context.Context
-	cancel         context.CancelFunc
-}
-
-// ConsumerHandler 实现sarama.ConsumerGroupHandler接口
-type ConsumerHandler struct {
-	messageService service.MessageService
-	hubService     service.HubService
-}
-
-// Setup 在消费者会话开始时调用
-func (h ConsumerHandler) Setup(_ sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-// Cleanup 在消费者会话结束时调用
-func (h ConsumerHandler) Cleanup(_ sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-// ConsumeClaim 处理消费的消息
-func (h ConsumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for message := range claim.Messages() {
-		log.Printf("Received message: topic=%s, partition=%d, offset=%d, key=%s, value=%s\n",
-			message.Topic, message.Partition, message.Offset, string(message.Key), string(message.Value))
-
-		// 处理消息，根据消息类型分发到不同的服务
-		// 这里简化处理，实际应该根据消息格式解析并处理
-
-		// 标记消息已处理
-		session.MarkMessage(message, "")
-	}
-	return nil
+	consumer   sarama.Consumer
+	instanceID string
+	topics     map[string]bool
+	mu         sync.Mutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	handlers   map[string]func(*SyncMessage)
 }
 
 // NewMessageConsumer 创建新的消息消费者
-func NewMessageConsumer(cfg *config.Config, messageService service.MessageService, hubService service.HubService) (*MessageConsumer, error) {
+func NewMessageConsumer(cfg *config.Config) (*MessageConsumer, error) {
 	config := sarama.NewConfig()
 	config.Consumer.Return.Errors = true
-	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 
-	// 创建消费者组
-	consumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.Kafka.ConsumerGroup, config)
+	consumer, err := sarama.NewConsumer(cfg.Kafka.Brokers, config)
 	if err != nil {
 		return nil, err
 	}
 
+	// 初始化主题映射
+	topics := make(map[string]bool)
+	for _, topic := range cfg.Kafka.Topics {
+		topics[topic] = true
+	}
+
+	// 生成实例ID
+	instanceID := generateInstanceID()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &MessageConsumer{
-		consumer:       consumer,
-		topics:         cfg.Kafka.Topics,
-		messageService: messageService,
-		hubService:     hubService,
-		ctx:            ctx,
-		cancel:         cancel,
+		consumer:   consumer,
+		instanceID: instanceID,
+		topics:     topics,
+		ctx:        ctx,
+		cancel:     cancel,
+		handlers:   make(map[string]func(*SyncMessage)),
 	}, nil
 }
 
-// Start 启动消费者
-func (c *MessageConsumer) Start() {
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		handler := ConsumerHandler{
-			messageService: c.messageService,
-			hubService:     c.hubService,
-		}
-
-		for {
-			// 消费消息
-			if err := c.consumer.Consume(c.ctx, c.topics, handler); err != nil {
-				log.Printf("Error from consumer: %v", err)
-			}
-
-			// 检查上下文是否已取消
-			if c.ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	log.Println("Kafka consumer started")
+// RegisterHandler 注册消息处理器
+func (c *MessageConsumer) RegisterHandler(msgType string, handler func(*SyncMessage)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.handlers[msgType] = handler
 }
 
-// Stop 停止消费者
-func (c *MessageConsumer) Stop() {
-	c.cancel()
-	c.wg.Wait()
-	if err := c.consumer.Close(); err != nil {
-		log.Printf("Error closing consumer: %v", err)
+// Start 启动消息消费
+func (c *MessageConsumer) Start() error {
+	// 订阅所有主题
+	for topic := range c.topics {
+		c.wg.Add(1)
+		go c.consumeTopic(topic)
 	}
-	log.Println("Kafka consumer stopped")
+	return nil
+}
+
+// consumeTopic 消费指定主题的消息
+func (c *MessageConsumer) consumeTopic(topic string) {
+	defer c.wg.Done()
+
+	// 获取所有分区
+	partitions, err := c.consumer.Partitions(topic)
+	if err != nil {
+		log.Printf("Failed to get partitions for topic %s: %v", topic, err)
+		return
+	}
+
+	// 为每个分区创建消费者
+	for _, partition := range partitions {
+		// 跳过当前实例产生的消息
+		go func(p int32) {
+			pc, err := c.consumer.ConsumePartition(topic, p, sarama.OffsetNewest)
+			if err != nil {
+				log.Printf("Failed to start consumer for partition %d: %v", p, err)
+				return
+			}
+			defer pc.Close()
+
+			for {
+				select {
+				case msg := <-pc.Messages():
+					// 解析消息
+					var syncMsg SyncMessage
+					if err := json.Unmarshal(msg.Value, &syncMsg); err != nil {
+						log.Printf("Failed to unmarshal message: %v", err)
+						continue
+					}
+
+					// 跳过自己产生的消息
+					if syncMsg.SourceID == c.instanceID {
+						continue
+					}
+
+					// 调用相应的处理器
+					c.mu.Lock()
+					handler, exists := c.handlers[syncMsg.Type]
+					c.mu.Unlock()
+
+					if exists {
+						go handler(&syncMsg)
+					}
+
+				case err := <-pc.Errors():
+					log.Printf("Error consuming message: %v", err)
+
+				case <-c.ctx.Done():
+					return
+				}
+			}
+		}(partition)
+	}
+}
+
+// Stop 停止消息消费
+func (c *MessageConsumer) Stop() error {
+	// 取消上下文
+	c.cancel()
+	// 等待所有goroutine结束
+	c.wg.Wait()
+	// 关闭消费者
+	return c.consumer.Close()
+}
+
+// GetInstanceID 获取实例ID
+func (c *MessageConsumer) GetInstanceID() string {
+	return c.instanceID
 }

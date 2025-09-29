@@ -18,6 +18,7 @@ type IRoomRepository interface {
 	RemoveMember(ctx context.Context, roomID, userID uint) error
 	GetMembers(ctx context.Context, roomID uint) ([]*model.RoomMember, error)
 	IsMember(ctx context.Context, roomID, userID uint) (bool, error)
+	GetRoomUsers(ctx context.Context, roomID uint) ([]*model.User, error)
 }
 
 // RoomRepository 房间仓库实现
@@ -97,6 +98,18 @@ func (r *RoomRepository) IsMember(ctx context.Context, roomID, userID uint) (boo
 		Where("room_id = ? AND user_id = ?", roomID, userID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// GetRoomUsers 获取房间内的所有用户
+func (r *RoomRepository) GetRoomUsers(ctx context.Context, roomID uint) ([]*model.User, error) {
+	var users []*model.User
+	if err := r.db.WithContext(ctx).Table("users").
+		Joins("JOIN room_members ON room_members.user_id = users.id").
+		Where("room_members.room_id = ?", roomID).
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 // RoomRepositorySet 房间仓库依赖注入

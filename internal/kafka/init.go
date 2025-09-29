@@ -1,7 +1,10 @@
 package kafka
 
 import (
+	"encoding/hex"
 	"log"
+	"math/rand"
+	"time"
 
 	"github.com/Gopher0727/RTMP/config"
 	"github.com/Gopher0727/RTMP/internal/service"
@@ -27,11 +30,11 @@ func InitKafka(cfg *config.Config) error {
 }
 
 // InitConsumer 初始化消费者（需要在服务初始化后调用）
-func InitConsumer(cfg *config.Config, messageService service.MessageService, hubService service.HubService) error {
+func InitConsumer(cfg *config.Config, messageService service.IMessageService, hubService service.IHubService) error {
 	var err error
 
 	// 初始化消费者
-	consumer, err = NewMessageConsumer(cfg, messageService, hubService)
+	consumer, err = NewMessageConsumer(cfg)
 	if err != nil {
 		return err
 	}
@@ -66,4 +69,15 @@ func CloseKafka() {
 	}
 
 	log.Println("Kafka connections closed")
+}
+
+// generateInstanceID 生成唯一的实例ID
+func generateInstanceID() string {
+	b := make([]byte, 8)
+	_, err := rand.Read(b)
+	if err != nil {
+		// 如果随机数生成失败，使用时间戳和进程ID作为备用
+		return time.Now().Format("20060102150405")
+	}
+	return "instance-" + hex.EncodeToString(b)
 }

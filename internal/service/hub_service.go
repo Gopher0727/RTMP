@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"sync"
 	"time"
 
@@ -12,6 +14,14 @@ import (
 	"github.com/Gopher0727/RTMP/internal/model"
 	"github.com/Gopher0727/RTMP/internal/repository"
 )
+
+// MessageNotifier 消息通知接口，用于解耦Kafka依赖
+type MessageNotifier interface {
+	SendUserMessage(userID uint, message *model.Message) error
+	SendRoomMessage(roomID uint, message *model.Message) error
+	SendStatusUpdate(userID uint, status int) error
+	GetInstanceID() string
+}
 
 // Client 客户端连接
 type Client struct {
@@ -58,14 +68,17 @@ type IHubService interface {
 	GetOnlineUsers(ctx context.Context) ([]*model.User, error)
 	SendMessage(ctx context.Context, message *model.Message) error
 	BroadcastToRoom(ctx context.Context, roomID uint, message *model.Message) error
+	SetMessageNotifier(notifier MessageNotifier)
 }
 
 // HubService Hub服务实现
 type HubService struct {
-	userRepo    repository.IUserRepository
-	messageRepo repository.IMessageRepository
-	roomRepo    repository.IRoomRepository
-	db          *gorm.DB
+	userRepo        repository.IUserRepository
+	messageRepo     repository.IMessageRepository
+	roomRepo        repository.IRoomRepository
+	db              *gorm.DB
+	instanceID      string
+	messageNotifier MessageNotifier
 
 	// 本地内存中的客户端连接
 	mu      sync.RWMutex
@@ -84,155 +97,218 @@ func NewHubService(
 		messageRepo: messageRepo,
 		roomRepo:    roomRepo,
 		db:          db,
+		instanceID:  "unknown", // 初始为unknown，后续通过SetMessageNotifier更新
 		clients:     make(map[uint]*Client),
 	}
+}
+
+// SetMessageNotifier 设置消息通知器
+func (h *HubService) SetMessageNotifier(notifier MessageNotifier) {
+	h.mu.Lock()
+	h.messageNotifier = notifier
+	if notifier != nil {
+		h.instanceID = notifier.GetInstanceID()
+	}
+	h.mu.Unlock()
 }
 
 // Register 注册客户端
 func (h *HubService) Register(ctx context.Context, client *Client) error {
 	// 更新用户状态为在线
-	instanceID := "instance-1" // 实际应用中应该从配置获取
-	if err := h.userRepo.UpdateStatus(ctx, client.UserID, model.UserStatusOnline, instanceID); err != nil {
+	if err := h.userRepo.UpdateStatus(ctx, client.UserID, model.UserStatusOnline, h.instanceID); err != nil {
 		return err
 	}
 
 	// 保存客户端连接到本地内存
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.clients[client.UserID] = client
+	h.mu.Unlock()
+
+	// 发送用户上线状态到消息通知器
+	if h.messageNotifier != nil {
+		go func() {
+			if err := h.messageNotifier.SendStatusUpdate(client.UserID, model.UserStatusOnline); err != nil {
+				log.Printf("Failed to send online status: %v", err)
+			}
+		}()
+	}
+
+	log.Printf("Client registered: UserID=%d, IsWS=%v, InstanceID=%s", client.UserID, client.IsWS, h.instanceID)
 
 	return nil
 }
 
 // Unregister 注销客户端
 func (h *HubService) Unregister(ctx context.Context, userID uint) error {
-	// 更新用户状态为离线
-	if err := h.userRepo.UpdateStatus(ctx, userID, model.UserStatusOffline, ""); err != nil {
-		return err
-	}
-
-	// 从本地内存中移除客户端连接
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if client, ok := h.clients[userID]; ok {
-		if client.Cancel != nil {
-			client.Cancel() // 取消相关的goroutine
+	client, exists := h.clients[userID]
+	if exists {
+		client.Cancel() // 取消客户端上下文
+		if client.IsWS && client.Conn != nil {
+			client.Conn.Close()
 		}
 		delete(h.clients, userID)
 	}
+	h.mu.Unlock()
 
+	// 更新用户状态为离线
+	if err := h.userRepo.UpdateStatus(ctx, userID, model.UserStatusOffline, ""); err != nil {
+		log.Printf("Failed to update user status to offline: %v", err)
+	}
+
+	// 发送用户下线状态到消息通知器
+	if h.messageNotifier != nil && exists {
+		go func() {
+			if err := h.messageNotifier.SendStatusUpdate(userID, model.UserStatusOffline); err != nil {
+				log.Printf("Failed to send offline status: %v", err)
+			}
+		}()
+	}
+
+	log.Printf("Client unregistered: UserID=%d, InstanceID=%s", userID, h.instanceID)
 	return nil
 }
 
-// IsOnline 查询用户是否在线
+// IsOnline 检查用户是否在线
 func (h *HubService) IsOnline(ctx context.Context, userID uint) (bool, string, error) {
-	user, err := h.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return false, "", err
+	// 首先检查本地实例是否有此用户连接
+	h.mu.RLock()
+	_, exists := h.clients[userID]
+	h.mu.RUnlock()
+
+	if exists {
+		return true, h.instanceID, nil
 	}
 
-	return user.Status == model.UserStatusOnline, user.InstanceID, nil
+	// 从数据库查询用户状态（可能在其他实例上在线）
+	return h.userRepo.IsOnline(ctx, userID)
 }
 
 // GetOnlineUsers 获取在线用户列表
 func (h *HubService) GetOnlineUsers(ctx context.Context) ([]*model.User, error) {
-	// 实际应用中应该添加分页和过滤条件
-	var users []*model.User
-	if err := h.db.WithContext(ctx).Where("status = ?", model.UserStatusOnline).Find(&users).Error; err != nil {
-		return nil, err
-	}
-	return users, nil
+	return h.userRepo.GetOnlineUsers(ctx)
 }
 
-// SendMessage 发送消息
+// SendMessage 发送消息给指定用户
 func (h *HubService) SendMessage(ctx context.Context, message *model.Message) error {
-	// 1. 保存消息到数据库
+	// 保存消息到数据库
 	if err := h.messageRepo.Create(ctx, message); err != nil {
 		return err
 	}
 
-	// 2. 如果是单用户消息，检查用户是否在线
-	if message.TargetType == model.MessageTargetUser {
-		online, instanceID, err := h.IsOnline(ctx, message.TargetID)
+	// 检查消息接收者是否在当前实例
+	h.mu.RLock()
+	client, exists := h.clients[message.ReceiverID]
+	h.mu.RUnlock()
+
+	// 如果用户在当前实例，则直接发送消息
+	if exists {
+		// 序列化消息
+		msgBytes, err := json.Marshal(message)
 		if err != nil {
 			return err
 		}
 
-		// 3. 如果用户在线且在当前实例，直接发送
-		if online && instanceID == "instance-1" { // 实际应用中应该从配置获取
-			h.mu.RLock()
-			client, ok := h.clients[message.TargetID]
-			h.mu.RUnlock()
-
-			if ok {
-				h.deliverToClient(client, message)
+		// 根据客户端类型发送消息
+		if client.IsWS {
+			// WebSocket客户端直接发送
+			if err := client.Conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+				// 如果发送失败，可能是连接已断开，需要注销客户端
+				log.Printf("Failed to send message via WebSocket, unregistering client: %v", err)
+				go h.Unregister(ctx, client.UserID)
+			}
+		} else {
+			// HTTP长轮询客户端放入发送队列
+			select {
+			case client.SendQueue <- msgBytes:
+			default:
+				// 队列已满，可能需要处理
+				// todo
+				log.Printf("Send queue full for user %d", client.UserID)
 			}
 		}
-		// 如果用户在其他实例，通过Kafka发送（在实际应用中实现）
+
+		// 更新最后活跃时间
+		client.LastActive = time.Now()
+	}
+
+	// 发送消息到消息通知器
+	if h.messageNotifier != nil {
+		go func() {
+			if err := h.messageNotifier.SendUserMessage(message.ReceiverID, message); err != nil {
+				log.Printf("Failed to send message to notifier: %v", err)
+			}
+		}()
 	}
 
 	return nil
 }
 
-// BroadcastToRoom 广播消息到房间
+// BroadcastToRoom 向房间内所有用户广播消息
 func (h *HubService) BroadcastToRoom(ctx context.Context, roomID uint, message *model.Message) error {
-	// 1. 保存消息到数据库
+	// 保存消息到数据库
 	if err := h.messageRepo.Create(ctx, message); err != nil {
 		return err
 	}
 
-	// 2. 获取房间成员
-	members, err := h.roomRepo.GetMembers(ctx, roomID)
+	// 获取房间内的所有用户
+	roomUsers, err := h.roomRepo.GetRoomUsers(ctx, roomID)
 	if err != nil {
 		return err
 	}
 
-	// 3. 遍历房间成员，发送消息
-	for _, member := range members {
-		// 跳过发送者自己
-		if member.UserID == message.SenderID {
-			continue
-		}
+	// 序列化消息
+	msgBytes, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
 
-		// 检查用户是否在线
-		online, instanceID, err := h.IsOnline(ctx, member.UserID)
-		if err != nil {
-			continue
-		}
-
-		// 如果用户在线且在当前实例，直接发送
-		if online && instanceID == "instance-1" { // 实际应用中应该从配置获取
-			h.mu.RLock()
-			client, ok := h.clients[member.UserID]
-			h.mu.RUnlock()
-
-			if ok {
-				h.deliverToClient(client, message)
+	// 向当前实例中在房间内的用户发送消息
+	h.mu.RLock()
+	for _, user := range roomUsers {
+		if client, exists := h.clients[user.ID]; exists {
+			if client.IsWS {
+				// WebSocket客户端直接发送
+				if err := client.Conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+					// 如果发送失败，可能是连接已断开，需要注销客户端
+					log.Printf("Failed to send room message via WebSocket, unregistering client: %v", err)
+					// 复制user.ID以避免在RLock内修改map
+					uID := user.ID
+					h.mu.RUnlock() // 先释放读锁
+					go h.Unregister(ctx, uID)
+					h.mu.RLock() // 重新获取读锁继续循环
+				}
+			} else {
+				// HTTP长轮询客户端放入发送队列
+				select {
+				case client.SendQueue <- msgBytes:
+				default:
+					// 队列已满，可能需要处理
+					// todo
+					log.Printf("Send queue full for user %d", client.UserID)
+				}
 			}
+
+			// 更新最后活跃时间
+			client.LastActive = time.Now()
 		}
-		// 如果用户在其他实例，通过Kafka发送（在实际应用中实现）
+	}
+	h.mu.RUnlock()
+
+	// 发送消息到消息通知器
+	if h.messageNotifier != nil {
+		go func() {
+			if err := h.messageNotifier.SendRoomMessage(roomID, message); err != nil {
+				log.Printf("Failed to send room message to notifier: %v", err)
+			}
+		}()
 	}
 
 	return nil
 }
 
-// deliverToClient 将消息发送给客户端
-func (h *HubService) deliverToClient(client *Client, message *model.Message) {
-	// 实际应用中应该序列化消息
-	data := []byte("消息内容") // 示例，实际应用中应该序列化message对象
-
-	if client.IsWS && client.Conn != nil {
-		// WebSocket 发送
-		client.Conn.WriteMessage(websocket.TextMessage, data)
-	} else if !client.IsWS && client.SendQueue != nil {
-		// HTTP长轮询发送
-		select {
-		case client.SendQueue <- data:
-		default:
-			// 队列满，可丢弃或记录
-		}
-	}
-}
-
 // HubServiceSet Hub服务依赖注入
-var HubServiceSet = wire.NewSet(NewHubService)
+var HubServiceSet = wire.NewSet(
+	NewHubService,
+	wire.Bind(new(IHubService), new(*HubService)),
+)

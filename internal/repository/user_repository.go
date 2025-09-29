@@ -3,10 +3,10 @@ package repository
 import (
 	"context"
 
-	"github.com/google/wire"
 	"gorm.io/gorm"
 
 	"github.com/Gopher0727/RTMP/internal/model"
+	"github.com/google/wire"
 )
 
 // IUserRepository 用户仓库接口
@@ -14,8 +14,11 @@ type IUserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id uint) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
+	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	UpdateStatus(ctx context.Context, id uint, status int, instanceID string) error
 	List(ctx context.Context, page, size int) ([]*model.User, int64, error)
+	IsOnline(ctx context.Context, id uint) (bool, string, error)
+	GetOnlineUsers(ctx context.Context) ([]*model.User, error)
 }
 
 // UserRepository 用户仓库实现
@@ -62,6 +65,15 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, id uint, status int, 
 		}).Error
 }
 
+// GetByEmail 根据邮箱获取用户
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 // List 获取用户列表
 func (r *UserRepository) List(ctx context.Context, page, size int) ([]*model.User, int64, error) {
 	var users []*model.User
@@ -77,6 +89,24 @@ func (r *UserRepository) List(ctx context.Context, page, size int) ([]*model.Use
 	}
 
 	return users, total, nil
+}
+
+// IsOnline 检查用户是否在线
+func (r *UserRepository) IsOnline(ctx context.Context, id uint) (bool, string, error) {
+	var user model.User
+	if err := r.db.WithContext(ctx).Select("status, instance_id").Where("id = ?", id).First(&user).Error; err != nil {
+		return false, "", err
+	}
+	return user.Status == model.UserStatusOnline, user.InstanceID, nil
+}
+
+// GetOnlineUsers 获取在线用户列表
+func (r *UserRepository) GetOnlineUsers(ctx context.Context) ([]*model.User, error) {
+	var users []*model.User
+	if err := r.db.WithContext(ctx).Where("status = ?", model.UserStatusOnline).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 // UserRepositorySet 用户仓库依赖注入

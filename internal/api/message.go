@@ -26,10 +26,9 @@ func NewMessageHandler(messageService service.IMessageService) *MessageHandler {
 
 // SendMessageRequest 发送消息请求
 type SendMessageRequest struct {
-	Content    string              `json:"content" binding:"required"`
-	Type       model.MessageType   `json:"type" binding:"required,oneof=1 2 3"`
-	TargetType model.MessageTarget `json:"target_type" binding:"required,oneof=1 2"`
-	TargetID   uint                `json:"target_id" binding:"required"`
+	Content     string `json:"content" binding:"required"`
+	MessageType string `json:"message_type" binding:"required,oneof=user room"`
+	TargetID    uint   `json:"target_id" binding:"required"`
 }
 
 // MessageResponse 消息响应
@@ -92,13 +91,25 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	// 创建消息对象
 	message := &model.Message{
 		Content:    req.Content,
-		Type:       req.Type,
-		TargetType: req.TargetType,
-		TargetID:   req.TargetID,
 		SenderID:   userID.(uint),
 		SenderName: username.(string),
+		Type:       string(model.MessageTypeText), // 默认设置为文本消息类型
+	}
+
+	// 根据消息类型设置接收者
+	if req.MessageType == "user" {
+		// 私聊消息
+		message.TargetType = model.MessageTargetUser
+		message.TargetID = req.TargetID
+		message.ReceiverID = req.TargetID
+	} else {
+		// 房间消息
+		message.TargetType = model.MessageTargetRoom
+		message.TargetID = req.TargetID
+		message.RoomID = req.TargetID
 	}
 
 	ctx := context.Background()
@@ -155,8 +166,8 @@ func (h *MessageHandler) GetUserMessages(c *gin.Context) {
 		messageResponses[i] = &MessageResponse{
 			ID:         msg.ID,
 			Content:    msg.Content,
-			Type:       msg.Type,
-			TargetType: msg.TargetType,
+			Type:       model.MessageType(msg.Type),
+			TargetType: model.MessageTarget(msg.TargetType),
 			TargetID:   msg.TargetID,
 			SenderID:   msg.SenderID,
 			SenderName: msg.SenderName,
@@ -215,8 +226,8 @@ func (h *MessageHandler) GetRoomMessages(c *gin.Context) {
 		messageResponses[i] = &MessageResponse{
 			ID:         msg.ID,
 			Content:    msg.Content,
-			Type:       msg.Type,
-			TargetType: msg.TargetType,
+			Type:       model.MessageType(msg.Type),
+			TargetType: model.MessageTarget(msg.TargetType),
 			TargetID:   msg.TargetID,
 			SenderID:   msg.SenderID,
 			SenderName: msg.SenderName,

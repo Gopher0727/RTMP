@@ -14,7 +14,7 @@ import (
 
 // IUserService 用户服务接口
 type IUserService interface {
-	Register(ctx context.Context, username, password string) (*model.User, error)
+	Register(ctx context.Context, username, password, email string) (*model.User, error)
 	Login(ctx context.Context, username, password string) (*model.User, error)
 	GetUserByID(ctx context.Context, id uint) (*model.User, error)
 	UpdateUserStatus(ctx context.Context, id uint, status int, instanceID string) error
@@ -34,14 +34,23 @@ func NewUserService(userRepo repository.IUserRepository) IUserService {
 }
 
 // Register 用户注册
-func (s *UserServiceImp) Register(ctx context.Context, username, password string) (*model.User, error) {
-	// 检查用户是否已存在
+func (s *UserServiceImp) Register(ctx context.Context, username, password, email string) (*model.User, error) {
+	// 检查用户名是否已存在
 	existUser, err := s.userRepo.GetByUsername(ctx, username)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	if existUser != nil {
 		return nil, ErrUserAlreadyExists
+	}
+
+	// 检查邮箱是否已存在
+	existEmail, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if existEmail != nil {
+		return nil, ErrEmailAlreadyExists
 	}
 
 	// 对密码进行哈希处理
@@ -54,6 +63,8 @@ func (s *UserServiceImp) Register(ctx context.Context, username, password string
 	user := &model.User{
 		Username: username,
 		Password: hashedPassword,
+		Email:    email,
+		Nickname: username, // 使用用户名作为昵称
 		Status:   model.UserStatusOffline,
 	}
 

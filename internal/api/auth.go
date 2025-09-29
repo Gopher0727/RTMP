@@ -30,7 +30,6 @@ type RegisterRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=20" example:"user123"`
 	Password string `json:"password" binding:"required,min=6,max=20" example:"password123"`
 	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
-	Nickname string `json:"nickname" binding:"max=50" example:"用户昵称"`
 }
 
 // LoginRequest 登录请求
@@ -50,7 +49,6 @@ type UserInfo struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
-	Nickname string `json:"nickname"`
 	Avatar   string `json:"avatar"`
 }
 
@@ -74,13 +72,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	user, err := h.userService.Register(ctx, req.Username, req.Password)
+	user, err := h.userService.Register(ctx, req.Username, req.Password, req.Email)
 	if err != nil {
 		if err == service.ErrUserAlreadyExists {
-			utils.ResponseError(c, http.StatusConflict, 409, "用户已存在")
+			utils.ResponseError(c, http.StatusConflict, 409, "用户名已存在")
 			return
 		}
-		utils.ResponseInternalError(c, "注册失败")
+		if err == service.ErrEmailAlreadyExists {
+			utils.ResponseError(c, http.StatusConflict, 409, "邮箱已被注册")
+			return
+		}
+		utils.ResponseInternalError(c, "注册失败: "+err.Error())
 		return
 	}
 
@@ -95,7 +97,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		ID:       user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 	}
 
@@ -153,7 +154,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		ID:       user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 	}
 
@@ -225,7 +225,6 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		ID:       user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 	}
 
